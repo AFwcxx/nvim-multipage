@@ -62,7 +62,9 @@ function M.apply_layout_for(bufnr, tabpage)
   local lastline = api.nvim_buf_line_count(bufnr)
   local left_win = wins[1]
 
-  -- Take base topline from the left-most window
+  -------------------------------------------------------------------
+  -- Get base topline from the left-most window
+  -------------------------------------------------------------------
   local current_win = api.nvim_get_current_win()
   api.nvim_set_current_win(left_win)
   local base_view = vim.fn.winsaveview()
@@ -73,44 +75,80 @@ function M.apply_layout_for(bufnr, tabpage)
     overlap = 0
   end
 
-  -- Enable scrollbind for all windows of this buffer
+  -------------------------------------------------------------------
+  -- Turn off scrollbind while we arrange windows
+  -------------------------------------------------------------------
   for _, win in ipairs(wins) do
     api.nvim_win_call(win, function()
-      vim.wo.scrollbind = true
+      vim.wo.scrollbind = false
     end)
   end
 
-  -- Sequential layout: each pane starts where the previous one ends,
-  -- minus the configured overlap. This uses each window's *actual*
-  -- height, so no gaps even if heights differ.
-  local prev_topline = nil
-  local prev_height  = nil
+  -------------------------------------------------------------------
+  -- Pane 1: normalize its view and measure actual visible range
+  -------------------------------------------------------------------
+  local prev_last = nil
 
-  for idx, win in ipairs(wins) do
+  api.nvim_win_call(left_win, function()
+    local v = vim.fn.winsaveview()
+
+    local old_so = vim.wo.scrolloff or 0
+    vim.wo.scrolloff = 0
+
+    -- Clamp base topline to a valid value
+    local h = api.nvim_win_get_height(0)
+    local max_top = math.max(1, lastline - h + 1)
+    v.topline = clamp(base_view.topline, 1, max_top)
+    v.lnum = v.topline
+    vim.fn.winrestview(v)
+
+    -- Measure what is *actually* visible
+    local first_vis = vim.fn.line("w0")
+    local last_vis  = vim.fn.line("w$")
+
+    prev_last = last_vis
+
+    vim.wo.scrolloff = old_so
+  end)
+
+  -------------------------------------------------------------------
+  -- Other panes: each starts at prev_last - overlap + 1
+  -------------------------------------------------------------------
+  for idx = 2, #wins do
+    local win = wins[idx]
     api.nvim_win_call(win, function()
-      local h = api.nvim_win_get_height(win)
-      if h <= 0 then
-        return
-      end
-
       local v = vim.fn.winsaveview()
-      local max_top = math.max(1, lastline - h + 1)
-      local desired_top
 
-      if idx == 1 then
-        -- First window: clamp base topline for this height
-        desired_top = clamp(base_view.topline, 1, max_top)
-      else
-        -- Next windows: chain from previous window’s visible region
-        desired_top = clamp(prev_topline + prev_height - overlap, 1, max_top)
+      local old_so = vim.wo.scrolloff or 0
+      vim.wo.scrolloff = 0
+
+      local target_first = prev_last - overlap + 1
+      if target_first < 1 then
+        target_first = 1
+      elseif target_first > lastline then
+        target_first = lastline
       end
 
-      v.topline = desired_top
+      v.topline = target_first
+      v.lnum = target_first
       vim.fn.winrestview(v)
 
-      -- Remember for next window
-      prev_topline = v.topline
-      prev_height  = h
+      -- Measure actual visible range again
+      local first_vis = vim.fn.line("w0")
+      local last_vis  = vim.fn.line("w$")
+
+      prev_last = last_vis
+
+      vim.wo.scrolloff = old_so
+    end)
+  end
+
+  -------------------------------------------------------------------
+  -- Re-enable scrollbind so scrolling preserves offsets
+  -------------------------------------------------------------------
+  for _, win in ipairs(wins) do
+    api.nvim_win_call(win, function()
+      vim.wo.scrollbind = true
     end)
   end
 end
