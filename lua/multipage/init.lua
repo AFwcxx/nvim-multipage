@@ -95,7 +95,6 @@ function M.apply_layout_for(bufnr, tabpage)
     local old_so = vim.wo.scrolloff or 0
     vim.wo.scrolloff = 0
 
-    -- Clamp base topline to a valid value
     local h = api.nvim_win_get_height(0)
     local max_top = math.max(1, lastline - h + 1)
     v.topline = clamp(base_view.topline, 1, max_top)
@@ -103,9 +102,7 @@ function M.apply_layout_for(bufnr, tabpage)
     vim.fn.winrestview(v)
 
     -- Measure what is *actually* visible
-    local first_vis = vim.fn.line("w0")
-    local last_vis  = vim.fn.line("w$")
-
+    local last_vis = vim.fn.line("w$") -- last visible buffer line
     prev_last = last_vis
 
     vim.wo.scrolloff = old_so
@@ -133,10 +130,8 @@ function M.apply_layout_for(bufnr, tabpage)
       v.lnum = target_first
       vim.fn.winrestview(v)
 
-      -- Measure actual visible range again
-      local first_vis = vim.fn.line("w0")
-      local last_vis  = vim.fn.line("w$")
-
+      -- Measure actual visible range again for next pane
+      local last_vis = vim.fn.line("w$")
       prev_last = last_vis
 
       vim.wo.scrolloff = old_so
@@ -257,10 +252,11 @@ function M.setup(opts)
       if not (win and api.nvim_win_is_valid(win)) then
         return
       end
-      local tabpage = api.nvim_win_get_tabpage(win)
 
       if vim.b[bufnr].multipage_enabled then
-        M.apply_layout_for(bufnr, tabpage)
+        api.nvim_win_call(win, function()
+          vim.wo.scrollbind = true
+        end)
       else
         api.nvim_win_call(win, function()
           vim.wo.scrollbind = false
@@ -283,8 +279,6 @@ function M.setup(opts)
       end
 
       if vim.b[bufnr].multipage_enabled then
-        -- Just make sure this window participates in scrollbind;
-        -- do NOT re-layout, or we’ll slowly drift when switching panes.
         api.nvim_win_call(win, function()
           vim.wo.scrollbind = true
         end)
