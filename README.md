@@ -34,7 +34,7 @@ context than a single window can show vertically.
 
 ```lua
 use {
-  'yourname/nvim-multipage',
+  'afwcxx/nvim-multipage',
   config = function()
     require('multipage').setup {
       -- number of lines of overlap between panes
@@ -50,7 +50,7 @@ use {
 
 ```lua
 {
-  'yourname/nvim-multipage',
+  'afwcxx/nvim-multipage',
   config = function()
     require('multipage').setup {
       overlap = 2,
@@ -168,6 +168,5 @@ Issues and pull requests are welcome!
 
 ## License
 
-Choose your favorite permissive license (e.g. MIT) and add it as
-`LICENSE` in the repo.
+GPL-2.0 license
 
