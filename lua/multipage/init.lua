@@ -281,10 +281,13 @@ function M.setup(opts)
       if not (bufnr and api.nvim_buf_is_valid(bufnr)) then
         return
       end
-      local tabpage = api.nvim_win_get_tabpage(win)
 
       if vim.b[bufnr].multipage_enabled then
-        M.apply_layout_for(bufnr, tabpage)
+        -- Just make sure this window participates in scrollbind;
+        -- do NOT re-layout, or we’ll slowly drift when switching panes.
+        api.nvim_win_call(win, function()
+          vim.wo.scrollbind = true
+        end)
       else
         api.nvim_win_call(win, function()
           vim.wo.scrollbind = false
