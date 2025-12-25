@@ -253,11 +253,14 @@ function M.setup(opts)
         return
       end
 
+      local tabpage = api.nvim_win_get_tabpage(win)
+
       if vim.b[bufnr].multipage_enabled then
-        api.nvim_win_call(win, function()
-          vim.wo.scrollbind = true
-        end)
+        -- When this buffer (with multipage enabled) appears in a window,
+        -- re-apply the layout across all its windows in this tab.
+        M.apply_layout_for(bufnr, tabpage)
       else
+        -- Make sure buffers without multipage don't accidentally stay bound
         api.nvim_win_call(win, function()
           vim.wo.scrollbind = false
         end)
