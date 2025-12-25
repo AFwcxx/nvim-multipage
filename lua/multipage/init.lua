@@ -50,8 +50,7 @@ function M.apply_layout_for(bufnr, tabpage)
     return
   end
 
-  -- Only one window for this buffer: still keep scrollbind if enabled,
-  -- but nothing special to do layout-wise.
+  -- Only one window: just make sure it’s bound so it joins later.
   if #wins == 1 then
     local win = wins[1]
     api.nvim_win_call(win, function()
@@ -60,50 +59,58 @@ function M.apply_layout_for(bufnr, tabpage)
     return
   end
 
-  local left_win = wins[1]
   local lastline = api.nvim_buf_line_count(bufnr)
+  local left_win = wins[1]
 
-  -- Use full window height of the left-most window
-  local height = api.nvim_win_get_height(left_win)
-  if height <= 0 then
-    return
-  end
-
-  -- We want configurable overlap between panes:
-  -- overlap = 1:
-  --   left  : [T ... T+H-1]
-  --   right : [T+H-1 ... T+2H-2]
-  --
-  -- overlap = 2:
-  --   left  : [T ... T+H-1]
-  --   right : [T+H-2 ... T+2H-3]
-  local overlap = (M.config and M.config.overlap) or 1
-  local page_span = math.max(1, height - overlap)
-
-  -- Capture base view (topline) from left-most window
+  -- Take base topline from the left-most window
   local current_win = api.nvim_get_current_win()
   api.nvim_set_current_win(left_win)
   local base_view = vim.fn.winsaveview()
   api.nvim_set_current_win(current_win)
 
-  -- Ensure scrollbind is enabled only for windows of this buffer
+  local overlap = (M.config and M.config.overlap) or 1
+  if overlap < 0 then
+    overlap = 0
+  end
+
+  -- Enable scrollbind for all windows of this buffer
   for _, win in ipairs(wins) do
     api.nvim_win_call(win, function()
       vim.wo.scrollbind = true
     end)
   end
 
-  -- Layout each window with increasing topline offset based on page_span
+  -- Sequential layout: each pane starts where the previous one ends,
+  -- minus the configured overlap. This uses each window's *actual*
+  -- height, so no gaps even if heights differ.
+  local prev_topline = nil
+  local prev_height  = nil
+
   for idx, win in ipairs(wins) do
     api.nvim_win_call(win, function()
+      local h = api.nvim_win_get_height(win)
+      if h <= 0 then
+        return
+      end
+
       local v = vim.fn.winsaveview()
-      local desired_top = base_view.topline + page_span * (idx - 1)
+      local max_top = math.max(1, lastline - h + 1)
+      local desired_top
 
-      -- Clamp topline so we don't scroll past the end
-      local max_top = math.max(1, lastline - height + 1)
-      v.topline = clamp(desired_top, 1, max_top)
+      if idx == 1 then
+        -- First window: clamp base topline for this height
+        desired_top = clamp(base_view.topline, 1, max_top)
+      else
+        -- Next windows: chain from previous window’s visible region
+        desired_top = clamp(prev_topline + prev_height - overlap, 1, max_top)
+      end
 
+      v.topline = desired_top
       vim.fn.winrestview(v)
+
+      -- Remember for next window
+      prev_topline = v.topline
+      prev_height  = h
     end)
   end
 end
